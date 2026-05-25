@@ -1,231 +1,73 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { chatApi, knowledgeApi, KnowledgeStats, API_BASE_URL } from "@/lib/api";
+import { chatApi } from "@/lib/api";
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  sources?: Array<{ bvid: string; title: string; url: string }>;
-}
+interface Message { role: "user" | "assistant"; content: string; sources?: Array<{ note_id: string; title: string }>; }
+interface Props { sessionId: string; noteId: string | null; mode: "single" | "global"; }
 
-interface Props {
-  statsKey?: number;
-  sessionId?: string;
-  folderIds?: number[];
-}
-
-export default function ChatPanel({ statsKey, sessionId, folderIds }: Props) {
+export default function ChatPanel({ sessionId, noteId, mode }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState<KnowledgeStats | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-  const marker = "[[SOURCES_JSON]]";
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    knowledgeApi.getStats().then(setStats).catch(() => { });
-  }, [statsKey]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const send = async () => {
-    if (!input.trim() || loading) return;
-    const q = input.trim();
+  const handleSend = async () => {
+    const question = input.trim();
+    if (!question || loading) return;
+    setMessages((prev) => [...prev, { role: "user", content: question }]);
     setInput("");
-    const userId = Date.now().toString();
-    const assistantId = (Date.now() + 1).toString();
-    setMessages((prev) => [
-      ...prev,
-      { id: userId, role: "user", content: q },
-      { id: assistantId, role: "assistant", content: "", sources: [] },
-    ]);
     setLoading(true);
-
     try {
-      const response = await fetch(`${API_BASE_URL}/chat/ask/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          question: q,
-          session_id: sessionId,
-          folder_ids: folderIds,
-        }),
-      });
-
-      if (!response.ok || !response.body) {
-        throw new Error("流式接口不可用");
+      const response = await chatApi.askStream(question, sessionId, noteId || undefined, mode);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) throw new Error("No response stream");
+      let assistantContent = "";
+      let sources: Message["sources"] = [];
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        const sourceIdx = text.indexOf("[[SOURCES_JSON]]");
+        if (sourceIdx !== -1) {
+          assistantContent += text.substring(0, sourceIdx);
+          try { sources = JSON.parse(text.substring(sourceIdx + "[[SOURCES_JSON]]".length)); } catch {}
+        } else { assistantContent += text; }
+        setMessages((prev) => { const newMsgs = [...prev]; newMsgs[newMsgs.length - 1] = { role: "assistant", content: assistantContent, sources }; return newMsgs; });
       }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let done = false;
-      let buffer = "";
-      let sourcesJson = "";
-      let inSources = false;
-
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        if (value) {
-          const chunk = decoder.decode(value, { stream: !done });
-          if (chunk) {
-            if (inSources) {
-              sourcesJson += chunk;
-            } else {
-              buffer += chunk;
-              const markerIndex = buffer.indexOf(marker);
-              if (markerIndex !== -1) {
-                const contentPart = buffer.slice(0, markerIndex);
-                sourcesJson = buffer.slice(markerIndex + marker.length);
-                buffer = contentPart;
-                inSources = true;
-              }
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, content: buffer } : m
-                )
-              );
-            }
-          }
-        }
-      }
-
-      if (sourcesJson) {
-        try {
-          const parsed = JSON.parse(sourcesJson);
-          if (Array.isArray(parsed)) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, sources: parsed } : m
-              )
-            );
-          }
-        } catch {
-          // 忽略解析错误，避免影响主文本
-        }
-      }
-    } catch {
-      try {
-        const res = await chatApi.ask(q, sessionId, folderIds);
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId ? { ...m, content: res.answer, sources: res.sources } : m
-          )
-        );
-      } catch (err) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId
-              ? {
-                  ...m,
-                  content: `错误: ${err instanceof Error ? err.message : "请求失败"}`,
-                }
-              : m
-          )
-        );
-      }
-    }
-    setLoading(false);
+    } catch (e: any) { setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${e.message}` }]); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div className="panel-inner">
-      <div className="panel-header">
-        <div>
-          <div className="panel-title">对话工作台</div>
-          {stats && stats.total_videos > 0 && (
-            <div className="panel-subtitle">已收录 {stats.total_videos} 个视频</div>
-          )}
-        </div>
-        {messages.length > 0 && (
-          <button onClick={() => setMessages([])} className="btn btn-ghost" title="清空">
-            清空对话
-          </button>
-        )}
+    <aside className="w-96 border-l bg-white flex flex-col h-full">
+      <div className="p-4 border-b flex items-center justify-between">
+        <h2 className="font-bold text-gray-800">AI 助手</h2>
+        <span className="text-xs text-gray-400">{mode === "single" ? "当前笔记" : "全局搜索"}</span>
       </div>
-
-      <div className="panel-body">
-        <div className="chat-scroll">
-          {messages.length === 0 ? (
-            <div className="empty-state">
-              <div>
-                <div className="status-pill">检索就绪</div>
-                <p className="text-sm text-[var(--muted)] mt-3">把收藏夹变成可提问的知识库</p>
-              </div>
-              <div className="prompt-grid">
-                {[
-                  "总结收藏夹里最有价值的内容",
-                  "有哪些适合快速复习的系列？",
-                  "列出与某个主题相关的视频并给出关键点",
-                  "按主题整理我的收藏夹内容",
-                  "用一句话概括每个视频的重点",
-                  "推荐3个最适合入门的学习视频",
-                ].map((q, i) => (
-                  <button key={i} onClick={() => setInput(q)} className="prompt-chip">
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="chat-window">
-              {messages.map((m) => (
-                <div key={m.id} className={`message ${m.role}`}>
-                  <div className="message-bubble">
-                    <ReactMarkdown className="markdown" remarkPlugins={[remarkGfm]}>
-                      {m.content}
-                    </ReactMarkdown>
-                    {m.sources && m.sources.length > 0 && (
-                      <div className="source-list">
-                        {m.sources.map((s, i) => (
-                          <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="source-link">
-                            {s.title}
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {loading && (
-                <div className="message assistant">
-                  <div className="message-bubble">
-                    <div className="flex gap-1">
-                      {[0, 1, 2].map((i) => (
-                        <div key={i} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length === 0 && <p className="text-gray-400 text-sm text-center mt-8">{noteId ? "对这条笔记提问吧" : "选择笔记后可以提问"}</p>}
+        {messages.map((msg, i) => (
+          <div key={i} className={`${msg.role === "user" ? "text-right" : "text-left"}`}>
+            <div className={`inline-block max-w-[85%] px-3 py-2 rounded-lg text-sm ${msg.role === "user" ? "bg-red-500 text-white" : "bg-gray-100 text-gray-800"}`}>
+              <div className="whitespace-pre-wrap">{msg.content}</div>
+              {msg.sources && msg.sources.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-500">来源：{msg.sources.map((s, j) => (<span key={j} className="mr-1">[{s.title}]</span>))}</div>
               )}
-              <div ref={endRef} />
             </div>
-          )}
-        </div>
+          </div>
+        ))}
+        {loading && <div className="text-left"><div className="inline-block bg-gray-100 px-3 py-2 rounded-lg text-sm text-gray-400">思考中...</div></div>}
+        <div ref={bottomRef} />
       </div>
-
-      <div className="panel-footer">
-        <div className="flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-            placeholder="输入问题..."
-            className="input"
-          />
-          <button onClick={send} disabled={!input.trim() || loading} className="btn btn-primary">
-            发送
-          </button>
-        </div>
+      <div className="p-3 border-t flex gap-2">
+        <input className="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 focus:border-transparent" placeholder="输入问题..." value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()} disabled={loading} />
+        <button onClick={handleSend} disabled={loading || !input.trim()} className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600 disabled:opacity-50">发送</button>
       </div>
-    </div>
+    </aside>
   );
 }

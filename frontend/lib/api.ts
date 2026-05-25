@@ -1,300 +1,120 @@
-/**
- * API 客户端
- */
-
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// 通用请求函数
-async function request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
-
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            "Content-Type": "application/json",
-            ...options.headers,
-        },
-    });
-
-    // 会话失效时自动清除登录状态并刷新页面
-    if (response.status === 401) {
-        if (typeof window !== "undefined") {
-            localStorage.removeItem("bili_session");
-            localStorage.removeItem("bili_user");
-            window.location.href = "/";
-        }
-        throw new Error("会话已过期，请重新登录");
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const response = await fetch(url, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...options.headers },
+  });
+  if (response.status === 401) {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("xhs_session");
+      window.location.href = "/";
     }
-
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || `请求失败: ${response.status}`);
-    }
-
-    return response.json();
+    throw new Error("Session expired");
+  }
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || `Request failed: ${response.status}`);
+  }
+  return response.json();
 }
 
-// ==================== 类型定义 ====================
-
-export interface QRCodeResponse {
-    qrcode_key: string;
-    qrcode_url: string;
-    qrcode_image_base64: string;
+// ==================== Types ====================
+export interface LoginResponse {
+  session_id: string;
+  nickname?: string;
+  avatar?: string;
 }
 
-export interface LoginStatusResponse {
-    status: "waiting" | "scanned" | "confirmed" | "expired";
-    message: string;
-    user_info?: UserInfo;
-    session_id?: string;
+export interface NoteInfo {
+  note_id: string;
+  title: string;
+  author?: string;
+  cover_url?: string;
+  note_type: string;
+  tags?: string[];
+  category_id?: number;
+  status: string;
+  like_count: number;
+  collect_count: number;
 }
 
-export interface UserInfo {
-    mid: number;
-    uname: string;
-    face: string;
-    level?: number;
+export interface NoteDetail extends NoteInfo {
+  content?: string;
+  author_avatar?: string;
+  images?: string[];
+  video_url?: string;
+  comment_count: number;
 }
 
-export interface FavoriteFolder {
-    media_id: number;
-    title: string;
-    media_count: number;
-    is_selected: boolean;
-    is_default?: boolean;
-}
-
-export interface Video {
-    bvid: string;
-    title: string;
-    cover?: string;
-    duration?: number;
-    owner?: string;
-    play_count?: number;
-    intro?: string;
-    is_selected: boolean;
-}
-
-export interface FavoriteVideosResponse {
-    folder_info: Record<string, unknown>;
-    videos: Video[];
-    has_more: boolean;
-    page: number;
-    page_size: number;
-}
-
-export interface OrganizePreviewItem {
-    bvid: string;
-    title: string;
-    resource_id: number;
-    resource_type: number;
-    target_folder_id: number | null;
-    target_folder_title: string;
-    reason?: string;
-}
-
-export interface OrganizePreviewResponse {
-    default_folder_id: number;
-    default_folder_title: string;
-    folders: FavoriteFolder[];
-    items: OrganizePreviewItem[];
-    stats: {
-        total: number;
-        matched: number;
-        unmatched: number;
-    };
-}
-
-export interface BuildRequest {
-    folder_ids: number[];
-    exclude_bvids?: string[];
+export interface CategoryInfo {
+  id: number;
+  name: string;
+  description?: string;
+  icon_emoji?: string;
+  note_count: number;
 }
 
 export interface BuildStatus {
-    task_id: string;
-    status: "pending" | "running" | "completed" | "failed";
-    progress: number;
-    current_step: string;
-    total_videos: number;
-    processed_videos: number;
-    message: string;
-}
-
-export interface FolderStatus {
-    media_id: number;
-    indexed_count: number;
-    media_count?: number;
-    last_sync_at?: string;
-}
-
-export interface SyncRequest {
-    folder_ids?: number[];
+  task_id: string;
+  status: string;
+  progress: number;
+  total: number;
+  processed: number;
+  message: string;
 }
 
 export interface SyncResult {
-    folder_id: number;
-    total: number;
-    added: number;
-    removed: number;
-    indexed: number;
-    message: string;
-    last_sync_at: string;
+  added: number;
+  existing: number;
+  total: number;
 }
 
-export interface KnowledgeStats {
-    total_chunks: number;
-    total_videos: number;
-    collection_name: string;
-}
-
-export interface ChatResponse {
-    answer: string;
-    sources: Array<{
-        bvid: string;
-        title: string;
-        url: string;
-    }>;
-}
-
-// ==================== API 函数 ====================
-
-// 认证相关
+// ==================== APIs ====================
 export const authApi = {
-    // 获取登录二维码
-    getQRCode: () => request<QRCodeResponse>("/auth/qrcode"),
-
-    // 轮询登录状态
-    pollQRCode: (qrcodeKey: string) =>
-        request<LoginStatusResponse>(`/auth/qrcode/poll/${qrcodeKey}`),
-
-    // 获取会话信息
-    getSession: (sessionId: string) =>
-        request<{ valid: boolean; user_info: UserInfo }>(`/auth/session/${sessionId}`),
-
-    // 退出登录
-    logout: (sessionId: string) =>
-        request(`/auth/session/${sessionId}`, { method: "DELETE" }),
+  login: (cookie: string) =>
+    request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify({ cookie }) }),
+  getSession: (sessionId: string) =>
+    request<{ valid: boolean; user_info: { nickname: string; avatar: string } }>(`/auth/session/${sessionId}`),
+  logout: (sessionId: string) =>
+    request(`/auth/session/${sessionId}`, { method: "DELETE" }),
 };
 
-// 收藏夹相关
-export const favoritesApi = {
-    // 获取收藏夹列表
-    getList: (sessionId: string) =>
-        request<FavoriteFolder[]>(`/favorites/list?session_id=${sessionId}`),
-
-    // 获取收藏夹视频（分页）
-    getVideos: (mediaId: number, sessionId: string, page = 1) =>
-        request<FavoriteVideosResponse>(
-            `/favorites/${mediaId}/videos?session_id=${sessionId}&page=${page}`
-        ),
-
-    // 获取收藏夹全部视频
-    getAllVideos: (mediaId: number, sessionId: string) =>
-        request<{ total: number; videos: Video[] }>(
-            `/favorites/${mediaId}/all-videos?session_id=${sessionId}`
-        ),
-
-    // 预览整理
-    organizePreview: (folderId: number, sessionId: string) =>
-        request<OrganizePreviewResponse>(
-            `/favorites/organize/preview?session_id=${sessionId}`,
-            {
-                method: "POST",
-                body: JSON.stringify({ folder_id: folderId }),
-            }
-        ),
-
-    // 执行整理
-    organizeExecute: (
-        data: {
-            default_folder_id: number;
-            moves: Array<{ resource_id: number; resource_type: number; target_folder_id: number }>;
-        },
-        sessionId: string
-    ) =>
-        request<{ message: string; moved: number; groups: number }>(
-            `/favorites/organize/execute?session_id=${sessionId}`,
-            {
-                method: "POST",
-                body: JSON.stringify(data),
-            }
-        ),
-
-    // 清理失效内容
-    cleanInvalid: (folderId: number, sessionId: string) =>
-        request<{ message: string; data: Record<string, unknown> }>(
-            `/favorites/organize/clean-invalid?session_id=${sessionId}`,
-            {
-                method: "POST",
-                body: JSON.stringify({ folder_id: folderId }),
-            }
-        ),
+export const notesApi = {
+  list: (sessionId: string, categoryId?: number) =>
+    request<NoteInfo[]>(`/notes/list?session_id=${sessionId}${categoryId ? `&category_id=${categoryId}` : ""}`),
+  detail: (noteId: string) =>
+    request<NoteDetail>(`/notes/detail/${noteId}`),
+  count: (sessionId: string) =>
+    request<{ total: number; indexed: number; pending: number }>(`/notes/count?session_id=${sessionId}`),
 };
 
-// 知识库相关
+export const categoryApi = {
+  list: () => request<CategoryInfo[]>("/category/list"),
+  stats: () => request<{ total_categories: number; total_notes: number; uncategorized: number }>("/category/stats"),
+};
+
 export const knowledgeApi = {
-    // 获取统计信息
-    getStats: () => request<KnowledgeStats>("/knowledge/stats"),
-
-    // 构建知识库
-    build: (data: BuildRequest, sessionId: string) =>
-        request<{ task_id: string; message: string }>(
-            `/knowledge/build?session_id=${sessionId}`,
-            {
-                method: "POST",
-                body: JSON.stringify(data),
-            }
-        ),
-
-    // 获取构建状态
-    getBuildStatus: (taskId: string) =>
-        request<BuildStatus>(`/knowledge/build/status/${taskId}`),
-
-    // 获取收藏夹入库状态
-    getFolderStatus: (sessionId: string) =>
-        request<FolderStatus[]>(`/knowledge/folders/status?session_id=${sessionId}`),
-
-    // 同步收藏夹到向量库
-    syncFolders: (data: SyncRequest, sessionId: string) =>
-        request<SyncResult[]>(
-            `/knowledge/folders/sync?session_id=${sessionId}`,
-            {
-                method: "POST",
-                body: JSON.stringify(data),
-            }
-        ),
-
-    // 清空知识库
-    clear: (sessionId: string) =>
-        request<{ message: string; deleted_videos?: number }>(
-            `/knowledge/clear?session_id=${sessionId}`,
-            { method: "DELETE" }
-        ),
-
-    // 删除视频
-    deleteVideo: (bvid: string, sessionId: string) =>
-        request<{ message: string }>(
-            `/knowledge/video/${bvid}?session_id=${sessionId}`,
-            { method: "DELETE" }
-        ),
+  sync: (sessionId: string) =>
+    request<SyncResult>("/knowledge/sync", { method: "POST", body: JSON.stringify({ session_id: sessionId }) }),
+  build: (sessionId: string) =>
+    request<{ task_id: string; message: string; total: number }>("/knowledge/build", { method: "POST", body: JSON.stringify({ session_id: sessionId }) }),
+  buildStatus: (taskId: string) =>
+    request<BuildStatus>(`/knowledge/build/status/${taskId}`),
+  stats: () => request<{ total_chunks: number; total_notes: number }>("/knowledge/stats"),
 };
 
-// 对话相关
 export const chatApi = {
-    // 提问
-    ask: (question: string, sessionId?: string, folderIds?: number[]) =>
-        request<ChatResponse>("/chat/ask", {
-            method: "POST",
-            body: JSON.stringify({ question, session_id: sessionId, folder_ids: folderIds }),
-        }),
-
-    // 搜索
-    search: (query: string, k = 5) =>
-        request<{ results: Array<{ bvid: string; title: string; url: string; content_preview: string }> }>(
-            `/chat/search?query=${encodeURIComponent(query)}&k=${k}`,
-            { method: "POST" }
-        ),
+  askStream: (question: string, sessionId?: string, noteId?: string, mode: string = "single") =>
+    fetch(`${API_BASE_URL}/chat/ask/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, session_id: sessionId, note_id: noteId, mode }),
+    }),
+  search: (query: string, k = 5) =>
+    request<{ results: Array<{ note_id: string; title: string; content_preview: string }> }>(
+      `/chat/search?query=${encodeURIComponent(query)}&k=${k}`,
+      { method: "POST" }
+    ),
 };

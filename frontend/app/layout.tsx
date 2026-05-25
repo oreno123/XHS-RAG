@@ -1,37 +1,15 @@
 import type { Metadata } from "next";
-import { ZCOOL_XiaoWei, Noto_Sans_SC } from "next/font/google";
 import "./globals.css";
 
-const display = ZCOOL_XiaoWei({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-display",
-});
-
-const body = Noto_Sans_SC({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-body",
-});
-
 export const metadata: Metadata = {
-  title: "BiliMind - 收藏夹知识库",
-  description: "将你的 B站收藏夹变成可对话的知识库",
-  icons: {
-    icon: "/favicon.ico",
-  },
+  title: "XHS RAG - 小红书收藏知识库",
+  description: "把小红书收藏变成可对话、可分类的知识库",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN">
-      <body className={`${display.variable} ${body.variable} antialiased`}>
-        {children}
-      </body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

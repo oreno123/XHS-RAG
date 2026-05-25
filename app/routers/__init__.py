@@ -1,8 +1,3 @@
-"""
-Bilibili RAG 知识库系统
+from app.routers import auth, notes, knowledge, chat, category
 
-路由模块初始化
-"""
-from app.routers import auth, favorites, knowledge, chat
-
-__all__ = ["auth", "favorites", "knowledge", "chat"]
+__all__ = ["auth", "notes", "knowledge", "chat", "category"]

@@ -224,7 +224,9 @@ class XHS_Apis():
                 success, msg, res_json = self.get_user_note_info(user_id, cursor, cookies_str, xsec_token, xsec_source, proxies)
                 if not success:
                     raise Exception(msg)
-                notes = res_json["data"]["notes"]
+                notes = res_json.get("data", {}).get("notes") or res_json.get("data", {}).get("items") or []
+                if not isinstance(notes, list):
+                    notes = []
                 if 'cursor' in res_json["data"]:
                     cursor = str(res_json["data"]["cursor"])
                 else:
@@ -286,7 +288,9 @@ class XHS_Apis():
                                                                       xsec_source, proxies)
                 if not success:
                     raise Exception(msg)
-                notes = res_json["data"]["notes"]
+                notes = res_json.get("data", {}).get("notes") or res_json.get("data", {}).get("items") or []
+                if not isinstance(notes, list):
+                    notes = []
                 if 'cursor' in res_json["data"]:
                     cursor = str(res_json["data"]["cursor"])
                 else:
@@ -322,7 +326,10 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", False)
+            msg = res_json.get("msg", "")
+            if not success and res_json.get("code", 0) != 0:
+                msg = res_json.get("msg", str(res_json.get("code", "unknown error")))
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -348,7 +355,9 @@ class XHS_Apis():
                                                                          xsec_source, proxies)
                 if not success:
                     raise Exception(msg)
-                notes = res_json["data"]["notes"]
+                notes = res_json.get("data", {}).get("notes") or res_json.get("data", {}).get("items") or []
+                if not isinstance(notes, list):
+                    notes = []
                 if 'cursor' in res_json["data"]:
                     cursor = str(res_json["data"]["cursor"])
                 else:
@@ -389,7 +398,10 @@ class XHS_Apis():
                 "xsec_token": kvDist.get('xsec_token', '')
             }
             headers, cookies, data = generate_request_params(cookies_str, api, data, 'POST')
-            headers["x-rap-param"] = generate_x_rap_param(api, data)
+            try:
+                headers["x-rap-param"] = generate_x_rap_param(api, data)
+            except Exception:
+                pass
             headers["xy-direction"] = "13"
             response = requests.post(self.base_url + api, headers=headers, data=data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()

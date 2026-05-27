@@ -19,13 +19,17 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     const sid = localStorage.getItem("xhs_session");
-    if (!sid) { window.location.href = "/"; return; }
+    console.log("[WORKSPACE] session from localStorage:", sid);
+    if (!sid) { console.log("[WORKSPACE] No session, redirecting to /"); window.location.href = "/"; return; }
     setSessionId(sid);
   }, []);
 
   useEffect(() => {
     if (!sessionId) return;
-    notesApi.list(sessionId, selectedCategoryId || undefined).then(setNotes).catch(() => {});
+    console.log("[WORKSPACE] Fetching notes, sessionId:", sessionId);
+    notesApi.list(sessionId, selectedCategoryId || undefined)
+      .then((notes) => { console.log("[WORKSPACE] Notes loaded:", notes.length); setNotes(notes); })
+      .catch((e) => { console.error("[WORKSPACE] Notes fetch error:", e); });
   }, [sessionId, selectedCategoryId]);
 
   useEffect(() => {
@@ -44,16 +48,16 @@ export default function WorkspacePage() {
           selectedCategoryId={selectedCategoryId}
         />
       )}
-      <main className="flex-1 flex flex-col relative bg-gray-100">
+      <main className="flex-1 flex flex-col relative bg-paper-2">
         {selectedNoteId && noteDetail ? (
           <>
             <FullscreenToggle isFullscreen={isFullscreen} onToggle={() => setIsFullscreen(!isFullscreen)} />
-            <NoteDetailComponent note={noteDetail} />
+            <NoteDetailComponent note={noteDetail} sessionId={sessionId} />
             {!isFullscreen && (
               <div className="p-3 border-t flex gap-2 bg-white">
-                <button onClick={() => { setSelectedNoteId(null); setNoteDetail(null); }} className="text-sm text-gray-500 hover:text-gray-700">← 返回列表</button>
+                <button onClick={() => { setSelectedNoteId(null); setNoteDetail(null); }} className="text-sm text-muted hover:text-ink-soft">← 返回列表</button>
                 <div className="flex-1" />
-                <button onClick={() => setChatMode(chatMode === "single" ? "global" : "single")} className="text-xs px-3 py-1 rounded border hover:bg-gray-50">
+                <button onClick={() => setChatMode(chatMode === "single" ? "global" : "single")} className="text-xs px-3 py-1 rounded border hover:bg-paper-2">
                   {chatMode === "single" ? "当前笔记" : "全局搜索"} | 切换
                 </button>
               </div>
@@ -63,7 +67,7 @@ export default function WorkspacePage() {
           <NoteGrid notes={notes} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} />
         )}
       </main>
-      {!isFullscreen && <ChatPanel sessionId={sessionId} noteId={selectedNoteId} mode={chatMode} />}
+      {!isFullscreen && <ChatPanel sessionId={sessionId} noteId={selectedNoteId} mode={chatMode} onModeChange={() => setChatMode(chatMode === "single" ? "global" : "single")} />}
     </div>
   );
 }

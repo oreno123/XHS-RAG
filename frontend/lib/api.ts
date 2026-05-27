@@ -6,7 +6,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers },
   });
-  if (response.status === 401) {
+  if (response.status === 401 && !endpoint.startsWith("/auth/login")) {
     if (typeof window !== "undefined") {
       localStorage.removeItem("xhs_session");
       window.location.href = "/";
@@ -75,6 +75,10 @@ export interface SyncResult {
 export const authApi = {
   login: (cookie: string) =>
     request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify({ cookie }) }),
+  createQrcode: () =>
+    request<{ qr_id: string; qr_image: string }>("/auth/qrcode/create", { method: "POST" }),
+  checkQrcode: (qrId: string) =>
+    request<{ status: string; message?: string; session_id?: string; nickname?: string; avatar?: string }>(`/auth/qrcode/status/${qrId}`),
   getSession: (sessionId: string) =>
     request<{ valid: boolean; user_info: { nickname: string; avatar: string } }>(`/auth/session/${sessionId}`),
   logout: (sessionId: string) =>
@@ -97,7 +101,9 @@ export const categoryApi = {
 
 export const knowledgeApi = {
   sync: (sessionId: string) =>
-    request<SyncResult>("/knowledge/sync", { method: "POST", body: JSON.stringify({ session_id: sessionId }) }),
+    request<{ task_id: string; message: string }>("/knowledge/sync", { method: "POST", body: JSON.stringify({ session_id: sessionId }) }),
+  syncStatus: (taskId: string) =>
+    request<BuildStatus>(`/knowledge/sync/status/${taskId}`),
   build: (sessionId: string) =>
     request<{ task_id: string; message: string; total: number }>("/knowledge/build", { method: "POST", body: JSON.stringify({ session_id: sessionId }) }),
   buildStatus: (taskId: string) =>

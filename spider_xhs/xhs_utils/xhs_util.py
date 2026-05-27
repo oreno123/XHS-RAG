@@ -2,27 +2,31 @@ import json
 import math
 import os
 import random
+import subprocess
+import sys
 import time
 from urllib.parse import urlencode
 
-import execjs
 from xhs_utils.cookie_util import trans_cookies
 
 _STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'static'))
+_BRIDGE_PATH = os.path.join(_STATIC_DIR, '_bridge.js')
 
 
-def _compile_static_js(filename):
-    with open(os.path.join(_STATIC_DIR, filename), 'r', encoding='utf-8') as f:
-        return execjs.compile(f.read())
-
-
-_JS_CACHE = {}
-
-
-def _get_static_js(filename):
-    if filename not in _JS_CACHE:
-        _JS_CACHE[filename] = _compile_static_js(filename)
-    return _JS_CACHE[filename]
+def _call_node(module, fn, *args, timeout=10):
+    payload = json.dumps({"module": module, "fn": fn, "args": list(args)})
+    try:
+        proc = subprocess.run(
+            [sys.executable.replace('python', 'node').replace('python.exe', 'node.exe')
+             if False else 'node', _BRIDGE_PATH],
+            input=payload, capture_output=True, text=True, timeout=timeout,
+        )
+    except FileNotFoundError:
+        raise RuntimeError("Node.js not found. Install Node.js or check PATH.")
+    resp = json.loads(proc.stdout.strip())
+    if not resp.get('ok'):
+        raise RuntimeError(f"Node.js bridge error: {resp.get('error', 'unknown')}")
+    return resp['result']
 
 def generate_x_b3_traceid(len=16):
     x_b3_traceid = ""
@@ -54,22 +58,20 @@ def generate_search_request_id():
     return f"{random_part}-{timestamp_ms}"
 
 def generate_xs_xs_common(a1, api, data='', method='POST'):
-    ret = _get_static_js('xhs_main_260411.js').call('get_request_headers_params', api, data, a1, method)
-    xs, xt, xs_common = ret['xs'], ret['xt'], ret['xs_common']
-    return xs, xt, xs_common
+    ret = _call_node('sign', 'get_request_headers_params', api, data, a1, method)
+    return ret['xs'], ret['xt'], ret['xs_common']
 
 def generate_xs(a1, api, data=''):
-    ret = _get_static_js('xhs_main_260411.js').call('get_xs', api, data, a1)
-    xs, xt = ret['X-s'], ret['X-t']
-    return xs, xt
+    ret = _call_node('sign', 'get_request_headers_params', api, data, a1, 'POST')
+    return ret['xs'], ret['xt']
 
 def generate_xray_traceid():
-    return _get_static_js('xhs_xray.js').call('traceId')
+    return _call_node('xray', 'traceId')
 
 def generate_x_rap_param(api, data, app_id=None):
     if isinstance(data, (dict, list)):
         data = json.dumps(data, separators=(',', ':'), ensure_ascii=False)
-    return _get_static_js('xhs_rap.js').call('generate_x_rap_param', api, data or '', app_id)
+    return _call_node('rap', 'generate_x_rap_param', api, data or '', app_id)
 
 def get_common_headers():
     return {

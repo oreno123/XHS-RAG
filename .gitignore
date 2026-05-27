@@ -1,9 +1,30 @@
+# Python
 venv/
 __pycache__/
 *.pyc
+*.pyo
 .env
+
+# Data & logs
 data/
 logs/
+*.db
+
+# Frontend
 frontend/node_modules/
 frontend/.next/
-*.db
+
+# OS artifacts
+NUL
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Misc
+node_modules/
+package-lock.json
+.superpowers/

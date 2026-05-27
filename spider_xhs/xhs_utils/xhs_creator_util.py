@@ -1,51 +1,23 @@
 import json
 import os
+import subprocess
+import sys
 
-import execjs
-
-from xhs_utils.xhs_util import generate_x_b3_traceid, generate_xray_traceid, splice_str
+from xhs_utils.xhs_util import generate_x_b3_traceid, generate_xray_traceid, splice_str, _call_node
 
 _STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'static'))
+_BRIDGE_PATH = os.path.join(_STATIC_DIR, '_bridge.js')
 
-
-def _compile_static_js(filename):
-    with open(os.path.join(_STATIC_DIR, filename), 'r', encoding='utf-8') as f:
-        return execjs.compile(f.read())
-
-
-_JS_CACHE = {}
-
-
-def _get_static_js(filename):
-    if filename not in _JS_CACHE:
-        _JS_CACHE[filename] = _compile_static_js(filename)
-    return _JS_CACHE[filename]
-
-
-class LazyStaticJS:
-    def __init__(self, filename):
-        self.filename = filename
-
-    def call(self, *args):
-        return _get_static_js(self.filename).call(*args)
-
-    def eval(self, *args):
-        return _get_static_js(self.filename).eval(*args)
-
-
-signature_js = LazyStaticJS('xhs_creator_signature.js')
-sign_js = LazyStaticJS('xhs_creator_sign.js')
 
 def generate_xs(a1, api, data=''):
-    ret = _get_static_js('xhs_creator_260411.js').call('get_request_headers_params', api, data, a1)
+    ret = _call_node('sign', 'get_request_headers_params', api, data, a1)
     xs, xt = ret['xs'], ret['xt']
     if data:
         data = json.dumps(data, separators=(',', ':'), ensure_ascii=False)
     return xs, xt, data
 
 def generate_xs_xs_common(a1, api, data=''):
-    ret = _get_static_js('xhs_creator_260411.js').call('get_request_headers_params', api, data, a1)
-
+    ret = _call_node('sign', 'get_request_headers_params', api, data, a1)
     xs, xt, xs_common = ret['xs'], ret['xt'], ret['xs_common']
     return xs, xt, xs_common
 

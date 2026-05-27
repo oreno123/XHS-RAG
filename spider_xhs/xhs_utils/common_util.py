@@ -5,7 +5,11 @@ import hashlib
 import binascii
 import json
 
-import execjs
+try:
+    import execjs as _execjs
+except ImportError:
+    _execjs = None
+
 import requests
 from loguru import logger
 from dotenv import load_dotenv
@@ -86,8 +90,10 @@ def fetch_sec_cookies(cookies, headers):
             env = _load_websectiga_env()
             if env:
                 try:
+                    if _execjs is None:
+                        raise RuntimeError("execjs not available")
                     js_code = env + '\n' + jsvmp_code + '\nvar __result = _websectiga_result;'
-                    ctx = execjs.compile(js_code)
+                    ctx = _execjs.compile(js_code)
                     websectiga = ctx.eval('__result') or None
                 except Exception as e:
                     logger.debug(f'websectiga jsvmp execution failed: {e}')

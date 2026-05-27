@@ -9,7 +9,7 @@ export default function ImageCarousel({ images }: Props) {
   if (!images || images.length === 0) return null;
   return (
     <div className="relative">
-      <img src={images[current]} alt="" className="w-full max-h-[60vh] object-contain bg-black rounded-lg" />
+      <img src={images[current]} alt="" referrerPolicy="no-referrer" className="w-full max-h-[60vh] object-contain bg-black rounded-lg" />
       {images.length > 1 && (
         <>
           <button onClick={() => setCurrent((c) => (c > 0 ? c - 1 : images.length - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white w-8 h-8 rounded-full">‹</button>

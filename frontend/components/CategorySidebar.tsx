@@ -31,6 +31,7 @@ export default function CategorySidebar({ sessionId, onSelectCategory, selectedC
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [pushing, setPushing] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [progress, setProgress] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -105,6 +106,20 @@ export default function CategorySidebar({ sessionId, onSelectCategory, selectedC
 
   useEffect(() => () => stopPoll(), []);
 
+  const handlePush = async () => {
+    setPushing(true);
+    setStatusMsg("正在推送...");
+    try {
+      const result = await knowledgeApi.push(sessionId);
+      const channels = Object.entries(result.results || {});
+      const ok = channels.filter(([, v]) => v.status === "ok").length;
+      setStatusMsg(ok > 0 ? `已推送到 ${ok} 个渠道` : "推送失败，检查配置");
+    } catch (e: any) {
+      setStatusMsg(`推送失败: ${e.message}`);
+    }
+    setPushing(false);
+  };
+
   return (
     <aside className="w-56 border-r bg-paper flex flex-col h-full">
       <div className="p-4 border-b"><h2 className="font-bold text-ink">分类</h2></div>
@@ -129,6 +144,9 @@ export default function CategorySidebar({ sessionId, onSelectCategory, selectedC
         </button>
         <button onClick={handleBuild} disabled={syncing || building} className="w-full bg-white text-accent border border-accent/40 py-2 rounded-lg text-sm hover:bg-accent/5 disabled:opacity-50">
           {building ? "入库中..." : "开始入库"}
+        </button>
+        <button onClick={handlePush} disabled={syncing || building || pushing} className="w-full bg-paper-2 text-ink-soft border border-paper-3 py-2 rounded-lg text-sm hover:bg-paper-3 disabled:opacity-50">
+          {pushing ? "推送中..." : "推送回顾"}
         </button>
       </div>
     </aside>

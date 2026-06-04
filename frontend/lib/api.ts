@@ -109,6 +109,8 @@ export const knowledgeApi = {
   buildStatus: (taskId: string) =>
     request<BuildStatus>(`/knowledge/build/status/${taskId}`),
   stats: () => request<{ total_chunks: number; total_notes: number }>("/knowledge/stats"),
+  push: (sessionId: string) =>
+    request<{ status: string; results: Record<string, { status: string }> }>("/knowledge/push", { method: "POST", body: JSON.stringify({ session_id: sessionId }) }),
 };
 
 export const chatApi = {

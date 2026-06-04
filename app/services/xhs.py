@@ -74,18 +74,47 @@ class XhsService:
     def _http_cookies(self):
         return dict(pair.split('=', 1) for pair in self.cookie.split('; ') if '=' in pair)
 
-    def get_collect_notes(self) -> list[dict]:
-        """Fetch collected notes list. Details fetched later during build."""
+    def get_collect_notes(self, known_ids: set = None) -> list[dict]:
+        """Fetch collected notes. If known_ids provided, stops at first known note (incremental)."""
         user_data = self.verify_cookie()
         user_id = user_data.get("user_id", "")
         if not user_id:
             raise ValueError("Cannot get user_id from cookie")
-        user_url = f"https://www.xiaohongshu.com/user/profile/{user_id}?xsec_source=pc_user"
-        success, msg, notes = self.api.get_user_all_collect_note_info(user_url, self.cookie)
-        if not success:
-            raise ValueError(f"Failed to fetch collect notes: {msg}")
-        logger.info(f"Fetched {len(notes)} collected notes")
-        return notes
+
+        if not known_ids:
+            # Full sync: use existing method
+            user_url = f"https://www.xiaohongshu.com/user/profile/{user_id}?xsec_source=pc_user"
+            success, msg, notes = self.api.get_user_all_collect_note_info(user_url, self.cookie)
+            if not success:
+                raise ValueError(f"Failed to fetch collect notes: {msg}")
+            logger.info(f"Fetched {len(notes)} collected notes (full)")
+            return notes
+
+        # Incremental: paginate and stop on known note_id
+        new_notes = []
+        cursor = ''
+        xsec_source = 'pc_user'
+        while True:
+            success, msg, res_json = self.api.get_user_collect_note_info(
+                user_id, cursor, self.cookie, xsec_source=xsec_source
+            )
+            if not success:
+                raise ValueError(f"Failed to fetch collect page: {msg}")
+            data = res_json.get("data", {})
+            notes = data.get("notes") or data.get("items") or []
+            if not isinstance(notes, list):
+                notes = []
+            for note in notes:
+                note_id = note.get("note_card", note).get("note_id", "")
+                if note_id in known_ids:
+                    logger.info(f"Incremental sync: hit known note {note_id}, stopping. New: {len(new_notes)}")
+                    return new_notes
+                new_notes.append(note)
+            cursor = str(data.get("cursor", ""))
+            if not notes or not data.get("has_more", False):
+                break
+        logger.info(f"Incremental sync: fetched {len(new_notes)} new notes")
+        return new_notes
 
     def get_note_detail(self, note_url: str) -> dict:
         """Fetch full note detail by URL."""

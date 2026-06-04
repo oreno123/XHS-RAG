@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # Rate limiting
     xhs_request_interval: float = Field(default=3.0, env="XHS_REQUEST_INTERVAL")
 
+    # Push notifications
+    sct_key: str = Field(default="", env="SCT_KEY")
+    wechat_work_key: str = Field(default="", env="WECHAT_WORK_KEY")
+    feishu_webhook_url: str = Field(default="", env="FEISHU_WEBHOOK_URL")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

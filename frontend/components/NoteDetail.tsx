@@ -33,13 +33,6 @@ export default function NoteDetail({ note, sessionId }: Props) {
         </div>
       )}
       {note.content && <div className="mt-4 text-ink-soft leading-relaxed whitespace-pre-wrap text-sm">{note.content}</div>}
-      {note.images && note.images.length > 0 && (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {note.images.map((img, idx) => (
-            <img key={idx} src={img} alt="" referrerPolicy="no-referrer" className="w-full rounded-lg cursor-pointer hover:opacity-90 transition" onClick={() => window.open(img, '_blank')} />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

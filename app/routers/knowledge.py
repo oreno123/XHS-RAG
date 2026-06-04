@@ -11,6 +11,7 @@ from app.models import XhsSession, Note, Category, SyncRequest, BuildStatusRespo
 from app.services.xhs import XhsService
 from app.services.classifier import ClassifierService
 from app.services.rag import RAGService
+from app.services.push import push_weekly_summary
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -49,11 +50,21 @@ async def _run_sync(task_id: str, cookie: str):
         service = XhsService(cookie)
         import time as _time
 
-        # Phase 1: fetch collect list
+        # Phase 0: get existing note_ids for incremental sync
+        async with get_db_context() as db:
+            result = await db.execute(select(Note.note_id))
+            known_ids = set(row[0] for row in result.all())
+        logger.info(f"DB has {len(known_ids)} existing notes")
+
+        # Phase 1: fetch collect list (incremental if DB not empty)
         _tasks[task_id]["message"] = "正在获取收藏列表..."
-        raw_notes = await asyncio.to_thread(service.get_collect_notes)
+        raw_notes = await asyncio.to_thread(service.get_collect_notes, known_ids or None)
         parsed = await asyncio.to_thread(service.parse_collect_notes, raw_notes)
         total = len(parsed)
+        if total == 0:
+            _tasks[task_id]["status"] = "completed"
+            _tasks[task_id]["message"] = "没有新笔记，全部已同步"
+            return
         _tasks[task_id]["total"] = total
         _tasks[task_id]["message"] = f"获取到 {total} 条收藏，正在拉取详情..."
 
@@ -290,6 +301,49 @@ async def build_status(task_id: str):
 async def knowledge_stats():
     rag = RAGService()
     return rag.get_collection_stats()
+
+
+@router.post("/push")
+async def push_review(req: SyncRequest, db: AsyncSession = Depends(get_db)):
+    """Push weekly review to configured channels (WeChat/Feishu)."""
+    await _get_cookie(db, req.session_id)
+
+    # Gather stats
+    total_notes = await db.scalar(select(func.count(Note.id))) or 0
+    total_cats = await db.scalar(select(func.count(Category.id))) or 0
+
+    # Top categories by note count
+    cat_rows = await db.execute(
+        select(Category.name, func.count(Note.id).label("cnt"))
+        .join(Note, Note.category_id == Category.id)
+        .group_by(Category.name)
+        .order_by(func.count(Note.id).desc())
+        .limit(6)
+    )
+    categories = [{"name": r[0], "count": r[1]} for r in cat_rows.all()]
+
+    # Top 3 notes by like count
+    note_rows = await db.execute(
+        select(Note).order_by(Note.like_count.desc()).limit(3)
+    )
+    top_notes = []
+    for note in note_rows.scalars().all():
+        top_notes.append({
+            "title": note.title or "无标题",
+            "summary": (note.content or "")[:60],
+        })
+
+    # AI summary (generate simple one from data)
+    top_cat = categories[0]["name"] if categories else "综合"
+    ai_summary = f"你已收藏 {total_notes} 篇笔记，最关注「{top_cat}」话题"
+
+    results = await push_weekly_summary(
+        stats={"total_notes": total_notes, "total_categories": total_cats},
+        categories=categories,
+        top_notes=top_notes,
+        ai_summary=ai_summary,
+    )
+    return {"status": "ok", "results": results}
 
 
 @router.delete("/clear")

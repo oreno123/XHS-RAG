@@ -1,33 +1,33 @@
 @import "tailwindcss";
 
 @theme {
-  --color-paper: #f7f1e8;
-  --color-paper-2: #efe6d7;
-  --color-paper-3: #e6d7c2;
-  --color-ink: #1b1713;
-  --color-ink-soft: #2b241d;
-  --color-muted: #7b7167;
-  --color-accent: #d98b2b;
-  --color-accent-strong: #b66b17;
+  --color-paper: #0d0b08;
+  --color-paper-2: #141210;
+  --color-paper-3: #1c1916;
+  --color-ink: #f0e6d2;
+  --color-ink-soft: #b8a48a;
+  --color-muted: #5a4d3e;
+  --color-accent: #FE2C55;
+  --color-accent-strong: #E0244A;
   --color-teal: #2f7c78;
   --color-danger: #c7443a;
-  --color-border: #dccbb4;
+  --color-border: rgba(138, 117, 96, 0.15);
 }
 
 :root {
-  --ink: #1b1713;
-  --ink-soft: #2b241d;
-  --muted: #7b7167;
-  --paper: #f7f1e8;
-  --paper-2: #efe6d7;
-  --paper-3: #e6d7c2;
-  --accent: #d98b2b;
-  --accent-strong: #b66b17;
+  --ink: #f0e6d2;
+  --ink-soft: #b8a48a;
+  --muted: #5a4d3e;
+  --paper: #0d0b08;
+  --paper-2: #141210;
+  --paper-3: #1c1916;
+  --accent: #FE2C55;
+  --accent-strong: #E0244A;
   --teal: #2f7c78;
   --danger: #c7443a;
-  --border: #dccbb4;
-  --glow: rgba(217, 139, 43, 0.35);
-  --shadow: rgba(28, 23, 18, 0.14);
+  --border: rgba(138, 117, 96, 0.15);
+  --glow: rgba(254, 44, 85, 0.25);
+  --shadow: rgba(0, 0, 0, 0.4);
   --radius: 14px;
   --radius-lg: 20px;
 }
@@ -67,4 +67,27 @@ a {
 @keyframes fadeSlideIn {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Glass morphism utility */
+.glass {
+  background: rgba(20, 17, 12, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(138, 117, 96, 0.12);
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(138, 117, 96, 0.25);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(138, 117, 96, 0.4);
 }

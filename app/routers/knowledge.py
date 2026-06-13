@@ -263,7 +263,27 @@ async def _run_index(task_id: str, cookie: str):
                 _tasks[task_id]["progress"] = (i + 1) / total * 100
                 _tasks[task_id]["message"] = f"{i + 1}/{total} {title[:25]}"
 
+                # Rate limit to avoid 429 from DashScope
+                await asyncio.sleep(0.8)
+
             except Exception as e:
+                err_str = str(e)
+                if "429" in err_str:
+                    # Rate limited - wait longer and don't mark as error
+                    logger.warning(f"Rate limited at {i+1}/{total}, waiting 10s...")
+                    await asyncio.sleep(10)
+                    # Retry this note in next iteration by not changing status
+                    async with get_db_context() as db:
+                        db_result = await db.execute(select(Note).where(Note.note_id == note.note_id))
+                        db_note = db_result.scalar_one_or_none()
+                        if db_note:
+                            db_note.error_msg = None
+                            await db.commit()
+                    _tasks[task_id]["processed"] = i + 1
+                    _tasks[task_id]["progress"] = (i + 1) / total * 100
+                    _tasks[task_id]["message"] = f"{i + 1}/{total} 限流等待中..."
+                    continue
+
                 logger.error(f"Index failed for {note.note_id}: {e}")
                 async with get_db_context() as db:
                     db_result = await db.execute(select(Note).where(Note.note_id == note.note_id))

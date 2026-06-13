@@ -7,17 +7,18 @@ interface Props {
   sessionId: string;
   onSelectCategory: (categoryId: number | null) => void;
   selectedCategoryId: number | null;
+  onClose: () => void;
 }
 
 function ProgressBar({ progress, label, phase }: { progress: number; label: string; phase?: string }) {
   return (
-    <div className="px-3 py-2 border-t">
+    <div className="px-3 py-2 border-t border-border">
       {phase && <div className="text-xs font-medium text-ink-soft mb-0.5">{phase}</div>}
       <div className="flex justify-between text-xs text-muted mb-1">
         <span className="truncate flex-1">{label}</span>
         <span className="ml-2 shrink-0">{Math.round(progress)}%</span>
       </div>
-      <div className="h-1.5 bg-paper-3 rounded-full overflow-hidden">
+      <div className="h-1 bg-paper-3 rounded-full overflow-hidden">
         <div
           className="h-full bg-accent rounded-full transition-all duration-300 ease-out"
           style={{ width: `${Math.min(progress, 100)}%` }}
@@ -27,13 +28,14 @@ function ProgressBar({ progress, label, phase }: { progress: number; label: stri
   );
 }
 
-export default function CategorySidebar({ sessionId, onSelectCategory, selectedCategoryId }: Props) {
+export default function CategorySidebar({ sessionId, onSelectCategory, selectedCategoryId, onClose }: Props) {
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [building, setBuilding] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [progress, setProgress] = useState(0);
+  const [search, setSearch] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadCategories = async () => {
@@ -104,8 +106,6 @@ export default function CategorySidebar({ sessionId, onSelectCategory, selectedC
     }
   };
 
-  useEffect(() => () => stopPoll(), []);
-
   const handlePush = async () => {
     setPushing(true);
     setStatusMsg("正在推送...");
@@ -120,32 +120,76 @@ export default function CategorySidebar({ sessionId, onSelectCategory, selectedC
     setPushing(false);
   };
 
+  useEffect(() => () => stopPoll(), []);
+
+  const filtered = search
+    ? categories.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
+    : categories;
+
   return (
-    <aside className="w-56 border-r bg-paper flex flex-col h-full">
-      <div className="p-4 border-b"><h2 className="font-bold text-ink">分类</h2></div>
-      <nav className="flex-1 overflow-y-auto p-2">
-        <button onClick={() => onSelectCategory(null)} className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 ${selectedCategoryId === null ? "bg-accent/10 text-accent-strong font-medium" : "hover:bg-paper-2 text-ink-soft"}`}>全部笔记</button>
-        {categories.map((cat) => (
-          <button key={cat.id} onClick={() => onSelectCategory(cat.id)} className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 flex justify-between ${selectedCategoryId === cat.id ? "bg-accent/10 text-accent-strong font-medium" : "hover:bg-paper-2 text-ink-soft"}`}>
-            <span>{cat.icon_emoji || "📁"} {cat.name}</span>
-            <span className="text-muted">{cat.note_count}</span>
+    <aside className="w-56 glass flex flex-col h-full shrink-0">
+      {/* Header */}
+      <div className="p-4 border-b border-border flex items-center justify-between">
+        <h2 className="font-bold text-ink text-sm">分类</h2>
+        <button onClick={onClose} className="text-muted hover:text-ink transition text-lg leading-none">✕</button>
+      </div>
+
+      {/* Search */}
+      <div className="px-3 py-2">
+        <input
+          type="text"
+          placeholder="搜索分类..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full bg-paper-3/50 border border-border rounded-lg px-3 py-1.5 text-xs text-ink placeholder:text-muted focus:outline-none focus:border-accent/40 transition"
+        />
+      </div>
+
+      {/* Category list */}
+      <nav className="flex-1 overflow-y-auto px-2 py-1">
+        <button
+          onClick={() => onSelectCategory(null)}
+          className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-0.5 transition ${
+            selectedCategoryId === null
+              ? "bg-accent/15 text-accent font-medium"
+              : "hover:bg-paper-3 text-ink-soft"
+          }`}
+        >
+          全部笔记
+        </button>
+        {filtered.map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => onSelectCategory(cat.id)}
+            className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-0.5 flex justify-between transition ${
+              selectedCategoryId === cat.id
+                ? "bg-accent/15 text-accent font-medium"
+                : "hover:bg-paper-3 text-ink-soft"
+            }`}
+          >
+            <span className="truncate">{cat.icon_emoji || "📁"} {cat.name}</span>
+            <span className="text-muted text-xs shrink-0 ml-1">{cat.note_count}</span>
           </button>
         ))}
       </nav>
+
+      {/* Progress */}
       {(syncing || building) && progress > 0 && (
         <ProgressBar progress={progress} label={statusMsg} phase={syncing ? "同步收藏" : "AI 入库"} />
       )}
-      {statusMsg && !syncing && !building && (
-        <div className="px-3 py-2 text-xs text-muted border-t">{statusMsg}</div>
+      {statusMsg && !syncing && !building && !pushing && (
+        <div className="px-3 py-2 text-xs text-muted border-t border-border">{statusMsg}</div>
       )}
-      <div className="p-3 border-t space-y-2">
-        <button onClick={handleSync} disabled={syncing || building} className="w-full bg-accent text-white py-2 rounded-lg text-sm hover:bg-accent-strong disabled:opacity-50">
+
+      {/* Action buttons */}
+      <div className="p-3 border-t border-border space-y-1.5">
+        <button onClick={handleSync} disabled={syncing || building} className="w-full bg-accent text-white py-1.5 rounded-lg text-xs hover:bg-accent-strong disabled:opacity-50 transition active:scale-[0.98]">
           {syncing ? "同步中..." : "同步收藏"}
         </button>
-        <button onClick={handleBuild} disabled={syncing || building} className="w-full bg-white text-accent border border-accent/40 py-2 rounded-lg text-sm hover:bg-accent/5 disabled:opacity-50">
+        <button onClick={handleBuild} disabled={syncing || building} className="w-full bg-paper-3 text-ink-soft py-1.5 rounded-lg text-xs hover:bg-paper-2 disabled:opacity-50 transition active:scale-[0.98]">
           {building ? "入库中..." : "开始入库"}
         </button>
-        <button onClick={handlePush} disabled={syncing || building || pushing} className="w-full bg-paper-2 text-ink-soft border border-paper-3 py-2 rounded-lg text-sm hover:bg-paper-3 disabled:opacity-50">
+        <button onClick={handlePush} disabled={syncing || building || pushing} className="w-full text-muted hover:text-ink-soft py-1.5 rounded-lg text-xs hover:bg-paper-3 disabled:opacity-50 transition active:scale-[0.98]">
           {pushing ? "推送中..." : "推送回顾"}
         </button>
       </div>
